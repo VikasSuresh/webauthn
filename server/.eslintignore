@@ -1,0 +1,9 @@
+build/**
+docs/
+dist/**
+gulp/
+gulpfile.js
+jsdoc-template/
+tmp/**
+node_modules/**
+.eslintrc.js
