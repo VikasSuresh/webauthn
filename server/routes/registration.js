@@ -7,7 +7,7 @@ const users = require('./users.json');
 const session = require('./session.json');
 const credentials = require('./credentials.json');
 
-Router.post('/register/generate-options', async (req, res) => {
+Router.post('/generate-options', async (req, res) => {
     const { userId, uniqueId } = req.body;
 
     const user = users.find((u) => u._id === userId);
@@ -16,29 +16,31 @@ Router.post('/register/generate-options', async (req, res) => {
     const options = await generateRegistrationOptions({
         rpName: process.env.WEBAUTHN_RPNAME,
         rpID: process.env.WEBAUTHN_RPID,
-        userID: user.id,
+        // userID: user._id,
         userName: user.username,
         timeout: 60000,
-        attestationType: 'none',
+        attestationType: 'direct',
         excludeCredentials: [],
         authenticatorSelection: {
-            residentKey: 'required',
-            userVerification: 'preferred',
+            residentKey: 'preferred',
         },
         supportedAlgorithmIDs: [-7, -257],
     });
 
     session[ uniqueId ] = options.challenge;
 
+    fs.writeFileSync(path.join(__dirname, 'session.json'), JSON.stringify(session, null, 4));
+
     return res.status(200).send(options);
 });
 
-Router.post('/register/verify', async (req, res) => {
+Router.post('/verify', async (req, res) => {
     try {
         const { uniqueId, userId, response } = req.body;
 
         const challenge = session[ uniqueId ];
         session[ uniqueId ] = undefined;
+        fs.writeFileSync(path.join(__dirname, 'session.json'), JSON.stringify(session, null, 4));
 
         const verification = await verifyRegistrationResponse({
             response,
@@ -54,9 +56,10 @@ Router.post('/register/verify', async (req, res) => {
             credentials.push({
                 uniqueId,
                 userId,
-                credentialID,
-                credentialPublicKey,
+                credentialID: Buffer.from(credentialID).toString('base64'),
+                credentialPublicKey: Buffer.from(credentialPublicKey).toString('base64'),
                 counter,
+                transports: response.response.transports,
             });
 
             fs.writeFileSync(path.join(__dirname, 'credentials.json'), JSON.stringify(credentials, null, 4));

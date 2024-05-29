@@ -8,7 +8,12 @@ const users = require('./users.json');
 const session = require('./session.json');
 const credentials = require('./credentials.json');
 
-Router.post('/authentication/generate-options', async (req, res) => {
+const decode = function decode(str) {
+    const b = Buffer.from(str, 'base64');
+    return new Uint8Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
+};
+
+Router.post('/generate-options', async (req, res) => {
     const { uniqueId } = req.body;
     const options = await generateAuthenticationOptions({
         timeout: 60000,
@@ -18,20 +23,26 @@ Router.post('/authentication/generate-options', async (req, res) => {
     });
 
     session[ uniqueId ] = options.challenge;
+    fs.writeFileSync(path.join(__dirname, 'session.json'), JSON.stringify(session, null, 4));
 
     return res.status(200).send(options);
 });
 
-Router.post('/authentication/verify', async (req, res) => {
+Router.post('/verify', async (req, res) => {
     try {
         const { uniqueId, response } = req.body;
 
         const challenge = session[ uniqueId ];
         session[ uniqueId ] = undefined;
+        fs.writeFileSync(path.join(__dirname, 'session.json'), JSON.stringify(session, null, 4));
 
-        const authenticator = credentials.splice(({ credentialID }) => credentialID === response.rawId);
+        const authenticator = credentials.splice(credentials.indexOf(({ credentialID }) => credentialID === Buffer.from(response.rawId).toString('base64')))[ 0 ];
 
-        const user = users.find(({ _id }) => _id === authenticator.userId);
+        authenticator.credentialID = decode(authenticator.credentialID);
+
+        authenticator.credentialPublicKey = decode(authenticator.credentialPublicKey);
+
+        // const user = users.find(({ _id }) => _id === authenticator.userId);
 
         const verification = await verifyAuthenticationResponse({
             response,
@@ -45,10 +56,12 @@ Router.post('/authentication/verify', async (req, res) => {
         if (verification.verified && verification.authenticationInfo) {
             credentials.push({
                 ...authenticator,
-                counter: verification.authenticationInfo.counter,
+                credentialID: Buffer.from(authenticator.credentialID).toString('base64'),
+                credentialPublicKey: Buffer.from(authenticator.credentialPublicKey).toString('base64'),
+                counter: verification.authenticationInfo.newCounter,
             });
 
-            fs.writeFileSync(path.join(__dirname, 'creddentials.json'), JSON.stringify(credentials, null, 4));
+            fs.writeFileSync(path.join(__dirname, 'credentials.json'), JSON.stringify(credentials, null, 4));
 
             return res.status(200).send('JWT Generated');
         }
