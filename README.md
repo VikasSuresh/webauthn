@@ -8,6 +8,8 @@
 
 ## Information
   - Have hardcoded to handle only one user
+  - Instead of using redis to store session used session.json
+  - Instead of using mongo to store credentials and users used credentials and users.json
   - When register is clicked
       -  it calls register/generate-options and generate challenge and options, challenge is stored in session which is later used for verification and options is returned.
       -  the front-end uses options to create public-private-key pair and generate a response
